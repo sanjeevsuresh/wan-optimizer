@@ -1,7 +1,6 @@
 import os
 import sys
 from difflib import Differ
-from pprint import pprint
 
 import client
 import wan
@@ -42,4 +41,5 @@ def send_one_file(middlebox_module, testing_part_1):
         diff = Differ()
         result = list(diff.compare(result_data, input_data))
         raise Exception(
-            "The file received did not match the file sent.Diff\n:{}".format(pprint(result)))
+            "The file received did not match the file sent. File received had: " +
+            "{}\n and file sent had: {}\n".format(result_data, input_data))
