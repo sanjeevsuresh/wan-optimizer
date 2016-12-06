@@ -118,6 +118,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             data = packet.payload
         elif packet.is_fin and packet.size() == 0:
             self.send_packet(self.buffer.get(curr_flow, ''), packet.src, packet.dest, True, packet.is_fin, self.wan_port)
+            # Clear the buffer
+            self.buffer[curr_flow] = ''
             return
         else:
             LOG.info('Client sent data that was hashed...')
