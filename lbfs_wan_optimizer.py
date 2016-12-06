@@ -81,7 +81,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         if not curr_flow in self.buffer:
             self.buffer[curr_flow] = list()
         self.buffer[curr_flow].append(packet.payload)
-        print "".join(self.buffer[curr_flow])
 
         if packet.is_fin:
             chunked = self.chunk_data("".join(self.buffer[curr_flow]))
