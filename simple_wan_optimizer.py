@@ -40,7 +40,12 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         if packet.dest in self.address_to_port:
             # The packet is destined to one of the clients connected to this middlebox;
             # send the packet there.
-            self.send(packet, self.address_to_port[packet.dest])
+            wan_packets = self.handle_packet(packet, client=True)
+            if wan_packets:
+                for wan_packet in wan_packets:
+                    LOG.debug('WAN Packet size {}'.format(wan_packet.size()))
+                    self.send(wan_packet, self.address_to_port[packet.dest])
+            #self.send(packet, self.address_to_port[packet.dest])
         else:
             # The packet must be destined to a host connected to the other middlebox
             # so send it across the WAN.
@@ -64,7 +69,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                     self.send(wan_packet, self.wan_port)
             #self.send(packet, self.wan_port)
 
-    def handle_packet(self, packet):
+    def handle_packet(self, packet, client=False):
         """
         Add the packet to the buffer and return a packet if the block_size is reached
 
@@ -78,32 +83,34 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         ------
         Receives a packet
         """
-        more_bytes = packet.size()
         current_flow = (packet.src, packet.dest)
         if packet.is_raw_data:
             data = packet.payload
+            more_bytes = packet.size()
         else:
             LOG.debug('Received a payload I have seen before')
             data = self.seen[packet.payload]
+            more_bytes = len(data)
         current_buffer_size = len(self.buffer.get(current_flow, []))
         new_length = current_buffer_size + more_bytes
+        LOG.debug('Current Buffer: {} vs New Length: {}'.format(current_buffer_size, new_length))
         if new_length >= self.BLOCK_SIZE:
             overflow = new_length - self.BLOCK_SIZE
             LOG.debug('Overflow: {}'.format(overflow))
             tight_fit = more_bytes - overflow
             LOG.debug('Remainder {}'.format(tight_fit))
             # Make sure you're not skipping a byte here cause of careless indexing
-            block_of_data = self.buffer.get(current_flow) + data[:tight_fit]
+            block_of_data = self.buffer.get(current_flow, '') + data[:tight_fit]
             if overflow:
                 self.buffer[current_flow] = data[-overflow:] # Put the rest of the bits in buffer
             else:
                 self.buffer[current_flow] = ''
             # what if this packet is the fin? with overflow? then, I need to send the buffer later ...
             packets_to_send = []
-            packets_to_send.extend(self.send_packet(block_of_data, packet, False))
+            packets_to_send.extend(self.send_packet(block_of_data, packet, False, client=client))
             if packet.is_fin:
                 # The overflow will be the last packet that is also a fin!
-                last_packet = self.send_packet(self.buffer.get(current_flow), packet, True)
+                last_packet = self.send_packet(self.buffer.get(current_flow), packet, True, client=client)
                 self.buffer[current_flow] = ''
                 packets_to_send.extend(last_packet)
             return packets_to_send
@@ -113,27 +120,27 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             if packet.is_fin:
                 LOG.debug('el fin received in sub MAX_PACKET_SIZE: {}'.format(len(self.buffer[current_flow])))
                 whats_in_your_buffer = self.buffer[current_flow]
-                tosend = self.send_packet(whats_in_your_buffer, packet, True)
+                tosend = self.send_packet(whats_in_your_buffer, packet, True, client=client)
                 # Clear buffer now
                 self.buffer[current_flow] = ''
                 return tosend
 
-    def send_packet(self, block_of_data, packet, is_fin):
+    def send_packet(self, block_of_data, packet, is_fin, client=False):
         """
-        Turn a block of data into the finest packet
+        Turn a block of data into a list of packets to send
 
         Args:
             :str block_of_data: a self.BLOCK_SIZE amount of data
             :tcp_packet.Packet packet: a Packet
             :boolean is_fin: final packet
-
+            :boolean client: are these packets sent to a client?
 
         Returns:
         list[tcp_packet.Packet]
         """
         digest = get_hash(block_of_data)
         # Copy src, dest
-        if digest in self.seen:
+        if digest in self.seen and not client:
             is_raw_data = False
             assert len(digest) <= MAX_PACKET_SIZE, "Hash is not less than block_size"
             return [Packet(packet.src, packet.dest, is_raw_data, is_fin, digest)]
