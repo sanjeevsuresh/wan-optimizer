@@ -56,11 +56,34 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         curr_flow = (packet.src, packet.dest)
 
         if packet.payload in self.seen:
-            packet.payload = self.seen[packet.payload]
-            self.send(packet, self.address_to_port[packet.dest])
+            data = self.seen[packet.payload]
+            self.send_packet(packet, self.address_to_port[packet.dest])
         elif packet.is_raw_data:
-            h_data = utils.get_hash(packet.payload)
-            self.seen[h_data] = packet.payload
+            delimited_chunks = self.chunk_data(packet.payload)
+            first, rest = delimited_chunks[0], delimited_chunks[1:]
+
+            if rest:
+                hashed_block = get_hash(self.buffer.get(curr_flow, '') + first)
+                self.seen[hashed_block] = self.buffer.get(curr_flow, '') + first
+                self.buffer[curr_flow] = ''
+                for block in rest[:-1]:
+                    hashed_block = get_hash(block)
+                    self.seen[hashed_block] = block
+                last_chunk = rest[-1]
+                last_bits = utils.get_last_n_bits(utils.get_hash(last_chunk), 13)
+                if not (last_bits == self.GLOBAL_MATCH_BITSTRING or packet.is_fin):
+                    self.buffer[curr_flow] = last_chunk
+                else:
+                    hashed_block = get_hash(last_chunk)
+                    self.seen[hashed_block] = last_chunk
+            else:
+                bits = utils.get_last_n_bits(utils.get_hash(first), 13)
+                if not (bits == self.GLOBAL_MATCH_BITSTRING or packet.is_fin):
+                    self.buffer[curr_flow] = first
+                else:
+                    hashed_block = get_hash(first)
+                    self.seen[hashed_block] = first
+
             self.send(packet, self.address_to_port[packet.dest])
         else:
             LOG.debug('GOT A HASH WE HAVE NEVER SEEN!')
