@@ -1,6 +1,6 @@
 import wan_optimizer
-from utils import get_hash, get_last_n_bits, MAX_PACKET_SIZE
 import utils
+from utils import MAX_PACKET_SIZE
 from tcp_packet import Packet
 import logging
 
@@ -82,7 +82,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 i. if the chunk has been cached before send the hash of the chunk
                 ii. otherwise send the raw data with the raw_data flag as true
         """
-        port = packet.dest if packet.dest in self.address_to_port else self.wan_port
+        port = self.address_to_port[packet.dest] if packet.dest in self.address_to_port else self.wan_port
         curr_flow = (packet.src, packet.dest)
         if packet.is_raw_data:
             data = packet.payload
@@ -97,11 +97,10 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         # If fin:
         #   send what's in my buffer
         #   clear the buffer
-        LOG.debug('packet payload: {}'.format(packet.payload))
         delimited_chunks = self.chunk_data(data)
+        assert len(data) == len(''.join(delimited_chunks)), 'chunk_data is not working'
         # First block needs to be added to my buffer
         if delimited_chunks:
-            LOG.debug('delimited_chunks: {}'.format(delimited_chunks))
             first, rest = delimited_chunks[0], delimited_chunks[1:]
             self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + first
             if rest:
@@ -123,10 +122,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             else:
                  # The second packet is perfectly delimited (i.e) the delimiter is
                  # at the end of the packet.
-                 LOG.debug('Rest: {}'.format(rest))
-                 LOG.debug('Buffer {}'.format(self.buffer[curr_flow]))
-                 LOG.debug('First: {}'.format(first))
-                 last_bits = get_last_n_bits(get_hash(self.buffer[curr_flow]), 13)
+                 last_bits = utils.get_last_n_bits(utils.get_hash(self.buffer[curr_flow]), 13)
                  LOG.debug('last_bits == GLOBAL_MATCH_STRING == {}'.format(last_bits == self.GLOBAL_MATCH_BITSTRING))
                  LOG.debug('Last bits {}'.format(last_bits))
                  LOG.debug('GLOB bits {}'.format(self.GLOBAL_MATCH_BITSTRING))
@@ -142,25 +138,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
                                   packet.is_raw_data, packet.is_fin, port, client=client)
                 self.buffer[curr_flow] = ''
-
-
-
-
-
-        # if not curr_flow in self.buffer:
-        #     self.buffer[curr_flow] = list()
-        # self.buffer[curr_flow].append(packet.payload)
-        #
-        # if packet.is_fin:
-        #     chunked = self.chunk_data("".join(self.buffer[curr_flow]))
-        #     packets = list()
-        #     for chunk in chunked:
-        #         send_packet = Packet(packet.src, packet.dest, chunk in self.seen.keys(), False, chunk)
-        #         packets.append(send_packet)
-        #     packets[-1].is_fin = True
-        #     for send_packet in packets:
-        #         self.send_packet(send_packet, self.wan_port)
-        #     self.buffer[curr_flow] = list()
 
     def chunk_data(self, data):
         """ Breaks up data based on LBFS method.
@@ -179,18 +156,13 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         chunk_start = 0
         chunk_list = []
         offset = 0
-        LOG.debug('data: {}'.format(data))
         while offset < num_windows:
             window = data[offset : offset + self.window_size] if len(data) > offset + self.window_size else data[offset:]
-            LOG.debug('window {}'.format(window))
             hashed = utils.get_hash(window)
             low13 = utils.get_last_n_bits(hashed, 13)
             if low13 == self.GLOBAL_MATCH_BITSTRING and len(window) == self.window_size:
-                LOG.debug('low13: {}'.format(low13))
-                LOG.debug('glob : {}'.format(self.GLOBAL_MATCH_BITSTRING))
                 # This is where data should be broken up
                 chunk = data[chunk_start : offset + self.window_size]
-                LOG.debug('chunk: {}'.format(chunk))
                 chunk_list.append(chunk)
                 chunk_start = offset + self.window_size
                 offset = chunk_start
@@ -226,7 +198,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         Returns:
         Send the damn packet
         """
-        digest = get_hash(data)
+        digest = utils.get_hash(data)
         # Copy src, dest
         if digest in self.seen and not client:
             is_raw_data = False
