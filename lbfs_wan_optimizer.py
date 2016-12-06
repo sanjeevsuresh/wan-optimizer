@@ -111,7 +111,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 i. if the chunk has been cached before send the hash of the chunk
                 ii. otherwise send the raw data with the raw_data flag as true
         """
-
+        if packet.is_fin:
+            LOG.debug('Handling fin packet in handle_outgoing')
         curr_flow = (packet.src, packet.dest)
         if packet.is_raw_data and packet.size() != 0:
             data = packet.payload
@@ -133,6 +134,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                     block = self.buffer.get(curr_flow, '') + delimiter
                     if num_delimiters == 1:
                         # first and last delimiter -> keep truth of fin packet
+                        LOG.debug('Sending first block: {}'.format(len(block)))
                         self.send_packet(block, packet.src, packet.dest, True, packet.is_fin, self.wan_port)
                     else:
                         # first delimiter with more to come -> not the last packet
@@ -213,13 +215,17 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         Returns:
         Send the damn packet
         """
+
         hashed_block = utils.get_hash(block_of_data)
 
         # Copy src, dest
         if hashed_block in self.seen and not client:
             is_raw_data = False
             assert len(hashed_block) <= MAX_PACKET_SIZE, "Hash is not less than block_size"
-            wan_packet = Packet(src, dest, is_raw_data, is_fin, h_block)
+            if is_fin:
+                LOG.debug('Sending hashed fin packet with data ({})'.format(
+                    'handle_incoming' if client else 'handle_outgoing'))
+            wan_packet = Packet(src, dest, is_raw_data, is_fin, hashed_block)
             self.send(wan_packet, self.wan_port)
 
         else:
@@ -234,11 +240,22 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                     wan_packet = Packet(src, dest, is_raw_data, False, block)
                     self.send(wan_packet, port)
                 if rest:
-                    last_packet = Packet(src, dest, is_raw_data, is_fin, block[-rest:])
+                    # Sending fin packet ...
+                    if is_fin:
+                        LOG.debug('Sending fin packet with data ({})'.format(
+                            'handle_incoming' if client else 'handle_outgoing'))
+                    last_packet = Packet(src, dest, is_raw_data, is_fin, block_of_data[-rest:])
                     self.send(last_packet, port)
                 else:
+                    # Sending fin packet ...
+                    if is_fin:
+                        LOG.debug('Sending fin packet with data ({})'.format(
+                            'handle_incoming' if client else 'handle_outgoing'))
                     last_packet = Packet(src, dest, is_raw_data, is_fin, '')
                     self.send(last_packet, port)
             else:
-                wan_packet = Packet(src, dest, is_raw_data, is_fin, block)
+                if is_fin:
+                    LOG.debug('Sending fin packet with data ({})'.format(
+                        'handle_incoming' if client else 'handle_outgoing'))
+                wan_packet = Packet(src, dest, is_raw_data, is_fin, block_of_data)
                 self.send(wan_packet, port)
