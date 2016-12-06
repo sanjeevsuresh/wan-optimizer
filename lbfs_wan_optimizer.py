@@ -132,20 +132,20 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
 
 
-        if not curr_flow in self.buffer:
-            self.buffer[curr_flow] = list()
-        self.buffer[curr_flow].append(packet.payload)
-
-        if packet.is_fin:
-            chunked = self.chunk_data("".join(self.buffer[curr_flow]))
-            packets = list()
-            for chunk in chunked:
-                send_packet = Packet(packet.src, packet.dest, chunk in self.seen.keys(), False, chunk)
-                packets.append(send_packet)
-            packets[-1].is_fin = True
-            for send_packet in packets:
-                self.send_packet(send_packet, self.wan_port)
-            self.buffer[curr_flow] = list()
+        # if not curr_flow in self.buffer:
+        #     self.buffer[curr_flow] = list()
+        # self.buffer[curr_flow].append(packet.payload)
+        #
+        # if packet.is_fin:
+        #     chunked = self.chunk_data("".join(self.buffer[curr_flow]))
+        #     packets = list()
+        #     for chunk in chunked:
+        #         send_packet = Packet(packet.src, packet.dest, chunk in self.seen.keys(), False, chunk)
+        #         packets.append(send_packet)
+        #     packets[-1].is_fin = True
+        #     for send_packet in packets:
+        #         self.send_packet(send_packet, self.wan_port)
+        #     self.buffer[curr_flow] = list()
 
     def chunk_data(self, data):
         """ Breaks up data based on LBFS method.
