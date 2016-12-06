@@ -4,6 +4,10 @@ import utils
 from tcp_packet import Packet
 import logging
 
+logging.basicConfig()
+LOG = logging.getLogger(name='lbfs_wan_optimizer')
+LOG.setLevel(logging.INFO)
+
 class WanOptimizer(wan_optimizer.BaseWanOptimizer):
     """ WAN Optimizer that divides data into variable-sized
     blocks based on the contents of the file.
