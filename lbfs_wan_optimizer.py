@@ -57,7 +57,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
         if packet.payload in self.seen:
             data = self.seen[packet.payload]
-            self.send_packet(data, packet.src, packet.dest, True, packet.is_fin, self.wan_port)
+            self.send_packet(data, packet.src, packet.dest, True, packet.is_fin, self.address_to_port[packet.dest], client=True)
 
         elif packet.is_raw_data:
             delimited_chunks, num_delimiters = self.chunk_data(packet.payload)
