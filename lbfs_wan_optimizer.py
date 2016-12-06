@@ -68,10 +68,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                     self.send_packet(self.buffer[curr_flow], packet.src, packet.dest, True,
                                      packet.is_fin, self.address_to_port[packet.dest], client=True)
             else:
-                # I have a delimited chunk that I need to add (the first index of the array)
-                # Send the damn thing
-                # Clear my buffer
-                # Add the rest
                 for i, delimiter in enumerate(delimited_chunks):
                     if i == 0:
                         # first delimited block -> add what is in the buffer and send it
@@ -96,6 +92,94 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                             self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimiter
         else:
             LOG.debug('GOT A HASH WE HAVE NEVER SEEN!')
+
+    def handle_packet(self, packet, client=False, port=None):
+        """ Handles an incoming packet.
+
+        Responsibility of this method is to add any raw data to the seen list and translate any
+        hashed data. It then forwards the data to the client.
+        """
+        if packet.dest in self.address_to_port:
+            port = self.address_to_port[packet.dest]
+        else:
+            port = self.wan_port
+
+        curr_flow = (packet.src, packet.dest)
+
+        if packet.payload in self.seen:
+            data = self.seen[packet.payload]
+            self.send_packet(data, packet.src, packet.dest, True, packet.is_fin, port, client=client)
+
+        elif packet.is_raw_data:
+            left_to_process = packet.payload
+
+            while left_to_process != '':
+                if self.contains_delimiter (left_to_process):
+                    # Get the first delimited chunk
+                    delimited, left_to_process = self.break_on_delimiter(left_to_process)
+                    # Join with anything in the buffer
+                    block = self.buffer.get(curr_flow, '') + delimited
+                    # Clear buffer
+                    self.buffer[curr_flow] = ''
+                    if left_to_process:
+                        # more data from this packet to come.
+                        self.send_packet(block, packet.src, packet.dest, True, False, port, client=client)
+                    else:
+                        # Last part of this packet -> is_fin matches packets value
+                        self.send_packet(block, packet.src, packet.dest, True, packet.is_fin, port, client=client)
+                elif packet.is_fin:
+                    block = self.buffer.get(curr_flow, '') + left_to_process
+                    self.send_packet(block, packet.src, packet.dest, True, True, port, client=client)
+                    self.buffer[curr_flow] = ''
+                else:
+                    self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + left_to_process
+
+    def contains_delimiter(self, data):
+        """ Returns true if the chunk of data has a delimiter in it
+        """
+        num_windows = len(data) - self.window_size
+        offset = 0
+
+        while offset+self.window_size <= len(data):
+            window = data[offset : offset + self.window_size]
+            hashed = utils.get_hash(window)
+            low13 = utils.get_last_n_bits(hashed, 13)
+            if low13 == self.GLOBAL_MATCH_BITSTRING and len(window) == self.window_size:
+                return True
+            else:
+                offset += 1
+        return False
+
+    def break_on_delimiter(self, data):
+        """ Breaks up data based on LBFS method.
+
+        This function will implement the breaking of the data in the fashion described in the LBFS
+        paper. Actually implements the sliding window approach to breaking data based off a
+        delimiter.
+
+        Arguments:
+            data: a string that contains data.
+        Returns:
+            ordered list of data that should be sent packet by packet. This is a mix of hashed and
+            un-hashed data. Data that has been sent or seen before is hashed, other data is sent raw
+        """
+        assert self.contains_delimiter(data), "Data does not have delimiter."
+        num_windows = len(data) - self.window_size
+        chunk_start = 0
+        offset = 0
+
+        while offset+self.window_size <= len(data):
+            window = data[offset : offset + self.window_size]
+            hashed = utils.get_hash(window)
+            low13 = utils.get_last_n_bits(hashed, 13)
+            if low13 == self.GLOBAL_MATCH_BITSTRING and len(window) == self.window_size:
+                # This is where data should be broken up
+                chunk = data[: offset + self.window_size]
+                left = data[offset + self.window_size:]
+                return chunk, left
+            else:
+                offset += 1
+        return [], []
 
     def handle_outgoing(self, packet, client=False):
         """ Handles receiving an outgoing packet.
