@@ -6,7 +6,7 @@ import logging
 
 logging.basicConfig()
 LOG = logging.getLogger(name='lbfs_wan_optimizer')
-LOG.setLevel(logging.INFO)
+LOG.setLevel(logging.DEBUG)
 
 class WanOptimizer(wan_optimizer.BaseWanOptimizer):
     """ WAN Optimizer that divides data into variable-sized
@@ -66,6 +66,10 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimited_chunks[0]
 
             else:
+                # I have a delimited chunk that I need to add (the first index of the array)
+                # Send the damn thing
+                # Clear my buffer
+                # Add the rest
                 for i, delimiter in enumerate(delimited_chunks):
                     if i == 0:
                         # first delimited block -> add what is in the buffer and send it
@@ -191,7 +195,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
         return chunk_list, num_chunks
 
-    def send_packet(self, block, src, dest, is_raw_data, is_fin, port, client=False):
+    def send_packet(self, block_of_data, src, dest, is_raw_data, is_fin, port, client=False):
         """
         Take in the exact block of data that it's supposed to send!
         (i.e. the end is a delimiter)
@@ -209,22 +213,22 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         Returns:
         Send the damn packet
         """
-        h_block = utils.get_hash(block)
+        hashed_block = utils.get_hash(block_of_data)
 
         # Copy src, dest
-        if h_block in self.seen and not client:
+        if hashed_block in self.seen and not client:
             is_raw_data = False
-            assert len(h_block) <= MAX_PACKET_SIZE, "Hash is not less than block_size"
+            assert len(hashed_block) <= MAX_PACKET_SIZE, "Hash is not less than block_size"
             wan_packet = Packet(src, dest, is_raw_data, is_fin, h_block)
             self.send(wan_packet, self.wan_port)
 
         else:
-            self.seen[h_block] = block
-            if len(block) > MAX_PACKET_SIZE:
-                num_blocks = len(block) // MAX_PACKET_SIZE
-                rest = len(block) % MAX_PACKET_SIZE
+            self.seen[hashed_block] = block_of_data
+            if len(block_of_data) > MAX_PACKET_SIZE:
+                num_blocks = len(block_of_data) // MAX_PACKET_SIZE
+                rest = len(block_of_data) % MAX_PACKET_SIZE
                 # Here Blocks are blocks of size MAX_PACKET
-                blocks = [block[k * MAX_PACKET_SIZE : (k + 1) * MAX_PACKET_SIZE] for k in range(num_blocks)]
+                blocks = [block_of_data[k * MAX_PACKET_SIZE : (k + 1) * MAX_PACKET_SIZE] for k in range(num_blocks)]
                 for block in blocks:
                     assert len(block) <= MAX_PACKET_SIZE, 'Ya fucked up {} != {}'.format(block, MAX_PACKET_SIZE)
                     wan_packet = Packet(src, dest, is_raw_data, False, block)
