@@ -81,7 +81,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 if not (bits == self.GLOBAL_MATCH_BITSTRING or packet.is_fin):
                     self.buffer[curr_flow] = first
                 else:
-                    hashed_block = get_hash(first)
+                    hashed_block = utils.get_hash(first)
                     self.seen[hashed_block] = first
 
             self.send(packet, self.address_to_port[packet.dest])
