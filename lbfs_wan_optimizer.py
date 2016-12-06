@@ -117,7 +117,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 else:
                     self.buffer[curr_flow] = last_chunk
             else:
-                 # The second packet 
+                 # The second packet is lately
                  self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
                                   packet.is_raw_data, packet.is_fin, port, client=client)
                  self.buffer[curr_flow] = ''
