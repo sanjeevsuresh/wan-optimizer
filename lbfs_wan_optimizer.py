@@ -203,6 +203,9 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             else:
                 offset += 1
 
+        chunk = data[chunk_start:]
+        chunk_list.append(chunk)
+
         return chunk_list
 
     def send_packet(self, data, src, dest, is_raw_data, is_fin, port, client=False):
