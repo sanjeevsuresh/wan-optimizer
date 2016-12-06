@@ -130,8 +130,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         Returns:
             ordered list of data that should be sent packet by packet. This is a mix of hashed and
             un-hashed data. Data that has been sent or seen before is hashed, other data is sent raw
-        Side-effects:
-            adds in the <hashed data, raw data> pair to the seen dict.
         """
         num_windows = len(data) - self.window_size
         chunk_start = 0
@@ -142,41 +140,20 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             window = data[offset : offset + self.window_size] if len(data) > offset + self.window_size else data[offset:]
             hashed = utils.get_hash(window)
             low13 = utils.get_last_n_bits(hashed, 13)
-
             if low13 == self.GLOBAL_MATCH_BITSTRING:
                 # This is where data should be broken up
                 chunk = data[chunk_start : offset + self.window_size]
-                h_chunk = utils.get_hash(chunk)
-                if not h_chunk in self.seen:
-                    self.seen[h_chunk] = chunk
-                    chunk_list.append(chunk)
-                else:
-                    chunk_list.append(h_chunk)
-                chunk_start = offset + self.window_size + 1
-                offset = chunk_start + self.window_size
+                chunk_list.append(h_chunk)
+                chunk_start = offset + self.window_size
+                offset = chunk_start
                 continue
-
             elif len(window) < self.window_size:
                 # last packet to send
                 chunk = data[chunk_start:]
-                h_chunk = utils.get_hash(chunk)
-                if not h_chunk in self.seen:
-                    self.seen[h_chunk] = chunk
-                    chunk_list.append(chunk)
-                else:
-                    chunk_list.append(h_chunk)
+                chunk_list.append(chunk)
                 break
-
             offset += 1
 
-        if len(chunk_list) == 0:
-            chunk = data[chunk_start:]
-            h_chunk = utils.get_hash(chunk)
-            if not h_chunk in self.seen:
-                self.seen[h_chunk] = chunk
-                chunk_list.append(chunk)
-            else:
-                chunk_list.append(h_chunk)
         return chunk_list
 
 def send_packet(self, data, src, dest, is_raw_data, is_fin, port, client=False):
