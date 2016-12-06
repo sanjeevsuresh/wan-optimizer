@@ -78,6 +78,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 i. if the chunk has been cached before send the hash of the chunk
                 ii. otherwise send the raw data with the raw_data flag as true
         """
+        port = packet.dest if packet.dest in self.address_to_port else self.wan_port
         curr_flow = (packet.src, packet.dest)
         if packet.is_raw_data:
             data = packet.payload
@@ -97,8 +98,32 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         if delimited_chunks:
             first, rest = delimited_chunks[0], delimited_chunks[1:]
             self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + first
+            self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
+                             packet.is_raw_data, False, port, client=client)
+            self.buffer[curr_flow] = ''
+            if rest:
+                self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
+                                 packet.is_raw_data, False, port, client=client)
+                self.buffer[curr_flow] = ''
+                for block in rest[:-1]:
+                    self.send_packet(block, packet.src, packet.dest,
+                             packet.is_raw_data, False, port, client=client)
+                last_chunk = rest[-1]
+                # If delimited, send, else add to buff
+                last_bits = get_last_n_bits(get_hash(last_chunk), 13)
+                if last_bits == self.GLOBAL_MATCH_BITSTRING or packet.is_fin:
+                    self.send_packet(last_chunk, packet.src, packet.dest,
+                             packet.is_raw_data, packet.is_fin, port, client=client)
+                else:
+                    self.buffer[curr_flow] = last_chunk
+            else:
+                 # The second packet 
+                 self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
+                                  packet.is_raw_data, packet.is_fin, port, client=client)
+                 self.buffer[curr_flow] = ''
 
         else:
+            # No Delimiter, add the rest to buffer
             self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + data
 
 
@@ -182,6 +207,7 @@ def send_packet(self, data, src, dest, is_raw_data, is_fin, port, client=False):
         wan_packet = Packet(src, dest, is_raw_data, is_fin, digest)
         self.send(wan_packet, port)
     else:
+        self.seen[digest] = data
         if len(data) > MAX_PACKET_SIZE:
             num_blocks = len(data) // MAX_PACKET_SIZE
             rest = len(data) % MAX_PACKET_SIZE
