@@ -41,64 +41,21 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         if packet.dest in self.address_to_port:
             # The packet is destined to one of the clients connected to this middlebox;
             # send the packet there.
-            self.handle_incoming(packet)
+            self.handle_packet(packet, client=True)
         else:
             # The packet must be destined to a host connected to the other middlebox
             # so send it across the WAN.
-            self.handle_outgoing(packet)
+            self.handle_packet(packet, client=False)
 
-    def handle_incoming(self, packet):
+    def handle_packet(self, packet, client=False):
         """ Handles an incoming packet.
 
         Responsibility of this method is to add any raw data to the seen list and translate any
         hashed data. It then forwards the data to the client.
         """
-        curr_flow = (packet.src, packet.dest)
+        if packet.is_fin:
+            LOG.debug("Handling FIN packet")
 
-        if packet.payload in self.seen:
-            data = self.seen[packet.payload]
-            self.send_packet(data, packet.src, packet.dest, True, packet.is_fin, self.address_to_port[packet.dest], client=True)
-
-        elif packet.is_raw_data:
-            delimited_chunks, num_delimiters = self.chunk_data(packet.payload)
-
-            if num_delimiters == 0:
-                self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimited_chunks[0]
-                if packet.is_fin:
-                    self.send_packet(self.buffer[curr_flow], packet.src, packet.dest, True,
-                                     packet.is_fin, self.address_to_port[packet.dest], client=True)
-            else:
-                for i, delimiter in enumerate(delimited_chunks):
-                    if i == 0:
-                        # first delimited block -> add what is in the buffer and send it
-                        block = self.buffer.get(curr_flow, '') + delimiter
-                        if num_delimiters == 1:
-                            # first and last delimiter -> keep truth of fin packet
-                            self.send_packet(block, packet.src, packet.dest, True, packet.is_fin, self.address_to_port[packet.dest], client=True)
-                        else:
-                            # first delimiter with more to come -> not the last packet
-                            self.send_packet(block, packet.src, packet.dest, True, False, self.address_to_port[packet.dest], client=True)
-                        self.buffer[curr_flow] = ''
-                    elif i < len(delimited_chunks) - 1:
-                        # all the in-between chunks
-                        self.send_packet(delimiter, packet.src, packet.dest, True, False, self.address_to_port[packet.dest], client=True)
-                    else:
-                        # last chunk in array.
-                        if num_delimiters == i+1 or packet.is_fin:
-                            # ends in a delimiter or is the last part of a fin packet -> send the block
-                            self.send_packet(delimiter, packet.src, packet.dest, True, packet.is_fin, self.address_to_port[packet.dest], client=True)
-                        else:
-                            # doesnt end in delimiter and isnt a fin packet -> buffer the data
-                            self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimiter
-        else:
-            LOG.debug('GOT A HASH WE HAVE NEVER SEEN!')
-
-    def handle_packet(self, packet, client=False, port=None):
-        """ Handles an incoming packet.
-
-        Responsibility of this method is to add any raw data to the seen list and translate any
-        hashed data. It then forwards the data to the client.
-        """
         if packet.dest in self.address_to_port:
             port = self.address_to_port[packet.dest]
         else:
@@ -109,6 +66,9 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         if packet.payload in self.seen:
             data = self.seen[packet.payload]
             self.send_packet(data, packet.src, packet.dest, True, packet.is_fin, port, client=client)
+
+        elif packet.payload == '' and packet.is_fin:
+            self.send_packet(self.buffer[curr_flow], packet.src, packet.dest, True, True, port, client=client)
 
         elif packet.is_raw_data:
             left_to_process = packet.payload
@@ -131,8 +91,12 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                     block = self.buffer.get(curr_flow, '') + left_to_process
                     self.send_packet(block, packet.src, packet.dest, True, True, port, client=client)
                     self.buffer[curr_flow] = ''
+                    break
                 else:
                     self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + left_to_process
+                    break
+        else:
+            LOG.error("Got a piece of data that has not been seen and is not raw data.")
 
     def contains_delimiter(self, data):
         """ Returns true if the chunk of data has a delimiter in it
@@ -181,110 +145,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 offset += 1
         return [], []
 
-    def handle_outgoing(self, packet, client=False):
-        """ Handles receiving an outgoing packet.
-
-        This function will deal with an outgoing packet in the manner described by the
-        low bandwidth filesystem paper. Namely it will break the file into chunks based off of
-        the SHA-1 hash of the data being sent.
-
-        Pseudocode:
-        1.) Place received data into a buffer for the (source,dest) pair
-        2.) when a fin packet is received:
-            a.) compute hash of data
-            b.) break hashed data at delimiters of `GLOBAL_MATCH_BITSTRING`
-            c.) for each chunk of data:
-                i. if the chunk has been cached before send the hash of the chunk
-                ii. otherwise send the raw data with the raw_data flag as true
-        """
-        if packet.is_fin:
-            LOG.debug('Handling fin packet in handle_outgoing')
-        curr_flow = (packet.src, packet.dest)
-        if packet.is_raw_data and packet.size() != 0:
-            data = packet.payload
-        elif packet.is_fin and packet.size() == 0:
-            self.send_packet(self.buffer.get(curr_flow, ''), packet.src, packet.dest, True, packet.is_fin, self.wan_port)
-            # Clear the buffer
-            self.buffer[curr_flow] = ''
-            return
-        else:
-            LOG.info('Client sent data that was hashed...')
-            data = self.seen[packet.payload]
-
-        delimited_chunks, num_delimiters = self.chunk_data(data)
-
-        if num_delimiters == 0:
-            self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimited_chunks[0]
-            if packet.is_fin:
-                LOG.debug('New case for fin packet')
-                self.send_packet(self.buffer[curr_flow], packet.src, packet.dest, True,
-                                 packet.is_fin, self.wan_port)
-        else:
-            for i, delimiter in enumerate(delimited_chunks):
-                if i == 0:
-                    # first delimited block -> add what is in the buffer and send it
-                    block = self.buffer.get(curr_flow, '') + delimiter
-                    if num_delimiters == 1:
-                        # first and last delimiter -> keep truth of fin packet
-                        LOG.debug('Sending first block: {}'.format(len(block)))
-                        self.send_packet(block, packet.src, packet.dest, True, packet.is_fin, self.wan_port)
-                    else:
-                        # first delimiter with more to come -> not the last packet
-                        self.send_packet(block, packet.src, packet.dest, True, False, self.wan_port)
-                    self.buffer[curr_flow] = ''
-                elif i < len(delimited_chunks) - 1:
-                    # all the in-between chunks
-                    self.send_packet(delimiter, packet.src, packet.dest, True, False, self.wan_port)
-                else:
-                    # last chunk in array.
-                    if num_delimiters == i+1 or packet.is_fin:
-                        # ends in a delimiter or is the last part of a fin packet -> send the block
-                        self.send_packet(delimiter, packet.src, packet.dest, True, packet.is_fin, self.wan_port)
-                    else:
-                        # doesnt end in delimiter and isnt a fin packet -> buffer the data
-                        self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimiter
-
-
-
-    def chunk_data(self, data):
-        """ Breaks up data based on LBFS method.
-
-        This function will implement the breaking of the data in the fashion described in the LBFS
-        paper. Actually implements the sliding window approach to breaking data based off a
-        delimiter.
-
-        Arguments:
-            data: a string that contains data.
-        Returns:
-            ordered list of data that should be sent packet by packet. This is a mix of hashed and
-            un-hashed data. Data that has been sent or seen before is hashed, other data is sent raw
-        """
-        num_windows = len(data) - self.window_size
-        chunk_start = 0
-        chunk_list = []
-        offset = 0
-        num_chunks = 0
-
-        while offset+self.window_size <= len(data):
-            window = data[offset : offset + self.window_size]
-            hashed = utils.get_hash(window)
-            low13 = utils.get_last_n_bits(hashed, 13)
-            if low13 == self.GLOBAL_MATCH_BITSTRING and len(window) == self.window_size:
-                # This is where data should be broken up
-                chunk = data[chunk_start : offset + self.window_size]
-                chunk_list.append(chunk)
-                chunk_start = offset + self.window_size
-                offset = chunk_start
-                num_chunks += 1
-            else:
-                offset += 1
-
-        if offset != len(data):
-            chunk = data[chunk_start:]
-            chunk_list.append(chunk)
-
-        return chunk_list, num_chunks
-
     def send_packet(self, block_of_data, src, dest, is_raw_data, is_fin, port, client=False):
         """
         Take in the exact block of data that it's supposed to send!
@@ -305,6 +165,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         """
 
         hashed_block = utils.get_hash(block_of_data)
+
+        LOG.debug("Block size: {}, Heading to client: {}".format(len(block_of_data), client))
 
         # Copy src, dest
         if hashed_block in self.seen and not client:
