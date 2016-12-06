@@ -181,8 +181,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         offset = 0
         num_chunks = 0
 
-        while offset < num_windows:
-            window = data[offset : offset + self.window_size] if len(data) > offset + self.window_size else data[offset:]
+        while offset+self.window_size <= len(data):
+            window = data[offset : offset + self.window_size]
             hashed = utils.get_hash(window)
             low13 = utils.get_last_n_bits(hashed, 13)
             if low13 == self.GLOBAL_MATCH_BITSTRING and len(window) == self.window_size:
@@ -192,17 +192,12 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 chunk_start = offset + self.window_size
                 offset = chunk_start
                 num_chunks += 1
-            elif len(window) < self.window_size:
-                # last packet to send
-                LOG.debug('Are we ever hitting this?')
-                chunk = data[chunk_start:]
-                chunk_list.append(chunk)
-                break
             else:
                 offset += 1
 
-        chunk = data[chunk_start:]
-        chunk_list.append(chunk)
+        if offset != len(data):
+            chunk = data[chunk_start:]
+            chunk_list.append(chunk)
 
         return chunk_list, num_chunks
 
