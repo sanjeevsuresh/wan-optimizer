@@ -129,6 +129,10 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
         if num_delimiters == 0:
             self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimited_chunks[0]
+            if packet.is_fin:
+                LOG.debug('New case for fin packet')
+                self.send_packet(self.buffer[curr_flow], packet.src, packet.dest, True,
+                                 packet.is_fin, self.wan_port)
         else:
             for i, delimiter in enumerate(delimited_chunks):
                 if i == 0:
@@ -141,7 +145,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                     else:
                         # first delimiter with more to come -> not the last packet
                         self.send_packet(block, packet.src, packet.dest, True, False, self.wan_port)
-                        self.buffer[curr_flow] = ''
+                    self.buffer[curr_flow] = ''
                 elif i < len(delimited_chunks) - 1:
                     # all the in-between chunks
                     self.send_packet(delimiter, packet.src, packet.dest, True, False, self.wan_port)
