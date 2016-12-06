@@ -60,33 +60,33 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             self.send_packet(data, packet.src, packet.dest, True, packet.is_fin, self.wan_port)
 
         elif packet.is_raw_data:
-            delimited_chunks, num_delimiters = self.chunk_data(data)
+            delimited_chunks, num_delimiters = self.chunk_data(packet.payload)
 
             if num_delimiters == 0:
                 self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimited_chunks[0]
 
-            if rest:
-                hashed_block = utils.get_hash(self.buffer.get(curr_flow, '') + first)
-                self.seen[hashed_block] = self.buffer.get(curr_flow, '') + first
-                self.buffer[curr_flow] = ''
-                for block in rest[:-1]:
-                    hashed_block = get_hash(block)
-                    self.seen[hashed_block] = block
-                last_chunk = rest[-1]
-                last_bits = utils.get_last_n_bits(utils.get_hash(last_chunk), 13)
-                if not (last_bits == self.GLOBAL_MATCH_BITSTRING or packet.is_fin):
-                    self.buffer[curr_flow] = last_chunk
-                else:
-                    hashed_block = utils.get_hash(last_chunk)
-                    self.seen[hashed_block] = last_chunk
             else:
-                bits = utils.get_last_n_bits(utils.get_hash(first), 13)
-                if not (bits == self.GLOBAL_MATCH_BITSTRING or packet.is_fin):
-                    self.buffer[curr_flow] = first
-                else:
-                    hashed_block = utils.get_hash(first)
-                    self.seen[hashed_block] = first
-
+                for i, delimiter in enumerate(delimited_chunks):
+                    if i == 0:
+                        # first delimited block -> add what is in the buffer and send it
+                        block = self.buffer.get(curr_flow, '') + delimiter
+                        if num_delimiters == 1:
+                            # first and last delimiter -> keep truth of fin packet
+                            self.send_packet(block, packet.src, packet.dest, True, packet.is_fin, self.address_to_port[packet.dest])
+                        else:
+                            # first delimiter with more to come -> not the last packet
+                            self.send_packet(block, packet.src, packet.dest, True, False, self.address_to_port[packet.dest])
+                    elif i < len(delimited_chunks) - 1:
+                        # all the in-between chunks
+                        self.send_packet(delimiter, packet.src, packet.dest, True, False, self.wan_port)
+                    else:
+                        # last chunk in array.
+                        if num_delimiters == i+1 or packet.is_fin:
+                            # ends in a delimiter or is the last part of a fin packet -> send the block
+                            self.send_packet(delimiter, packet.src, packet.dest, True, packet.is_fin, self.wan_port)
+                        else:
+                            # doesnt end in delimiter and isnt a fin packet -> buffer the data
+                            self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimiter
             self.send(packet, self.address_to_port[packet.dest])
         else:
             LOG.debug('GOT A HASH WE HAVE NEVER SEEN!')
