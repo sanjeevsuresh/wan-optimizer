@@ -185,48 +185,48 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
         return chunk_list
 
-def send_packet(self, data, src, dest, is_raw_data, is_fin, port, client=False):
-    """
-    Take in the exact block of data that it's supposed to send!
-    (i.e. the end is a delimiter)
+    def send_packet(self, data, src, dest, is_raw_data, is_fin, port, client=False):
+        """
+        Take in the exact block of data that it's supposed to send!
+        (i.e. the end is a delimiter)
 
-    Args:
-        self: wan_optimizer
-        :string data:
-        :string src:
-        :string dest:
-        :boolean is_raw_data:
-        :boolean is_fin:
-        port:
-        client:
+        Args:
+            self: wan_optimizer
+            :string data:
+            :string src:
+            :string dest:
+            :boolean is_raw_data:
+            :boolean is_fin:
+            port:
+            client:
 
-    Returns:
-    Send the damn packet
-    """
-    digest = get_hash(data)
-    # Copy src, dest
-    if digest in self.seen and not client:
-        is_raw_data = False
-        assert len(digest) <= MAX_PACKET_SIZE, "Hash is not less than block_size"
-        wan_packet = Packet(src, dest, is_raw_data, is_fin, digest)
-        self.send(wan_packet, port)
-    else:
-        self.seen[digest] = data
-        if len(data) > MAX_PACKET_SIZE:
-            num_blocks = len(data) // MAX_PACKET_SIZE
-            rest = len(data) % MAX_PACKET_SIZE
-            # Here Blocks are blocks of size MAX_PACKET
-            blocks = [data[k * MAX_PACKET_SIZE : (k + 1) * MAX_PACKET_SIZE] for k in range(num_blocks)]
-            for block in blocks:
-                assert len(block) <= MAX_PACKET_SIZE, 'Ya fucked up {} != {}'.format(block, MAX_PACKET_SIZE)
-                wan_packet = Packet(src, dest, is_raw_data, False, block)
-                self.send(wan_packet, port)
-            if rest:
-                last_packet = Packet(src, dest, is_raw_data, is_fin, data[-rest:])
-                self.send(last_packet, port)
-            else:
-                last_packet = Packet(src, dest, is_raw_data, is_fin, '')
-                self.send(last_packet, port)
-        else:
-            wan_packet = Packet(src, dest, is_raw_data, is_fin, data)
+        Returns:
+        Send the damn packet
+        """
+        digest = get_hash(data)
+        # Copy src, dest
+        if digest in self.seen and not client:
+            is_raw_data = False
+            assert len(digest) <= MAX_PACKET_SIZE, "Hash is not less than block_size"
+            wan_packet = Packet(src, dest, is_raw_data, is_fin, digest)
             self.send(wan_packet, port)
+        else:
+            self.seen[digest] = data
+            if len(data) > MAX_PACKET_SIZE:
+                num_blocks = len(data) // MAX_PACKET_SIZE
+                rest = len(data) % MAX_PACKET_SIZE
+                # Here Blocks are blocks of size MAX_PACKET
+                blocks = [data[k * MAX_PACKET_SIZE : (k + 1) * MAX_PACKET_SIZE] for k in range(num_blocks)]
+                for block in blocks:
+                    assert len(block) <= MAX_PACKET_SIZE, 'Ya fucked up {} != {}'.format(block, MAX_PACKET_SIZE)
+                    wan_packet = Packet(src, dest, is_raw_data, False, block)
+                    self.send(wan_packet, port)
+                if rest:
+                    last_packet = Packet(src, dest, is_raw_data, is_fin, data[-rest:])
+                    self.send(last_packet, port)
+                else:
+                    last_packet = Packet(src, dest, is_raw_data, is_fin, '')
+                    self.send(last_packet, port)
+            else:
+                wan_packet = Packet(src, dest, is_raw_data, is_fin, data)
+                self.send(wan_packet, port)
