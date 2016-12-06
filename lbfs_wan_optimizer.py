@@ -97,9 +97,11 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         # If fin:
         #   send what's in my buffer
         #   clear the buffer
+        LOG.debug('packet payload: {}'.format(packet.payload))
         delimited_chunks = self.chunk_data(data)
         # First block needs to be added to my buffer
         if delimited_chunks:
+            LOG.debug('delimited_chunks: {}'.format(delimited_chunks))
             first, rest = delimited_chunks[0], delimited_chunks[1:]
             self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + first
             if rest:
@@ -112,14 +114,23 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                              packet.is_raw_data, False, port, client=client)
                 last_chunk = rest[-1]
                 # If delimited, send, else add to buff
-                last_bits = get_last_n_bits(get_hash(last_chunk), 13)
+                last_bits = utils.get_last_n_bits(utils.get_hash(last_chunk), 13)
                 if last_bits == self.GLOBAL_MATCH_BITSTRING or packet.is_fin:
                     self.send_packet(last_chunk, packet.src, packet.dest,
                              packet.is_raw_data, packet.is_fin, port, client=client)
                 else:
                     self.buffer[curr_flow] = last_chunk
             else:
-                 # The second packet is lately
+                 # The second packet is perfectly delimited (i.e) the delimiter is
+                 # at the end of the packet.
+                 LOG.debug('Rest: {}'.format(rest))
+                 LOG.debug('Buffer {}'.format(self.buffer[curr_flow]))
+                 LOG.debug('First: {}'.format(first))
+                 last_bits = get_last_n_bits(get_hash(self.buffer[curr_flow]), 13)
+                 LOG.debug('last_bits == GLOBAL_MATCH_STRING == {}'.format(last_bits == self.GLOBAL_MATCH_BITSTRING))
+                 LOG.debug('Last bits {}'.format(last_bits))
+                 LOG.debug('GLOB bits {}'.format(self.GLOBAL_MATCH_BITSTRING))
+                 LOG.debug('Never hitting this case')
                  self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
                                   packet.is_raw_data, packet.is_fin, port, client=client)
                  self.buffer[curr_flow] = ''
@@ -130,6 +141,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             if packet.is_fin:
                 self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
                                   packet.is_raw_data, packet.is_fin, port, client=client)
+                self.buffer[curr_flow] = ''
 
 
 
@@ -167,24 +179,29 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         chunk_start = 0
         chunk_list = []
         offset = 0
-
+        LOG.debug('data: {}'.format(data))
         while offset < num_windows:
             window = data[offset : offset + self.window_size] if len(data) > offset + self.window_size else data[offset:]
+            LOG.debug('window {}'.format(window))
             hashed = utils.get_hash(window)
             low13 = utils.get_last_n_bits(hashed, 13)
-            if low13 == self.GLOBAL_MATCH_BITSTRING:
+            if low13 == self.GLOBAL_MATCH_BITSTRING and len(window) == self.window_size:
+                LOG.debug('low13: {}'.format(low13))
+                LOG.debug('glob : {}'.format(self.GLOBAL_MATCH_BITSTRING))
                 # This is where data should be broken up
                 chunk = data[chunk_start : offset + self.window_size]
+                LOG.debug('chunk: {}'.format(chunk))
                 chunk_list.append(chunk)
                 chunk_start = offset + self.window_size
                 offset = chunk_start
-                continue
             elif len(window) < self.window_size:
                 # last packet to send
+                LOG.debug('Are we ever hitting this?')
                 chunk = data[chunk_start:]
                 chunk_list.append(chunk)
                 break
-            offset += 1
+            else:
+                offset += 1
 
         return chunk_list
 
