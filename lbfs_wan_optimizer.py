@@ -97,7 +97,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         # If fin:
         #   send what's in my buffer
         #   clear the buffer
-        delimited_chunks = self.chunk_data(packet)
+        delimited_chunks = self.chunk_data(data)
         # First block needs to be added to my buffer
         if delimited_chunks:
             first, rest = delimited_chunks[0], delimited_chunks[1:]
