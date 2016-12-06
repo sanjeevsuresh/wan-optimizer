@@ -141,6 +141,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                     else:
                         # first delimiter with more to come -> not the last packet
                         self.send_packet(block, packet.src, packet.dest, True, False, self.wan_port)
+                        self.buffer[curr_flow] = ''
                 elif i < len(delimited_chunks) - 1:
                     # all the in-between chunks
                     self.send_packet(delimiter, packet.src, packet.dest, True, False, self.wan_port)
