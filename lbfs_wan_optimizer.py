@@ -62,7 +62,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             LOG.debug('GOT A HASH WE HAVE NEVER SEEN!')
 
 
-    def handle_outgoing(self, packet):
+    def handle_outgoing(self, packet, client=False):
         """ Handles receiving an outgoing packet.
 
         This function will deal with an outgoing packet in the manner described by the
@@ -79,6 +79,30 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 ii. otherwise send the raw data with the raw_data flag as true
         """
         curr_flow = (packet.src, packet.dest)
+        if packet.is_raw_data:
+            data = packet.payload
+        else:
+            LOG.debug('Received a payload I have seen before')
+            data = self.seen[packet.payload]
+        # Is there a delimiter in my packet?
+        # If so, add the delimited data to my buffer
+        # Send what's in my buffer
+        # Clear the buffer
+        # Add the remainder to the buffer
+        # If fin:
+        #   send what's in my buffer
+        #   clear the buffer
+        delimited_chunks = self.chunk_data(packet)
+        # First block needs to be added to my buffer
+        if delimited_chunks:
+            first, rest = delimited_chunks[0], delimited_chunks[1:]
+            self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + first
+
+        else:
+            self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + data
+
+
+
         if not curr_flow in self.buffer:
             self.buffer[curr_flow] = list()
         self.buffer[curr_flow].append(packet.payload)
