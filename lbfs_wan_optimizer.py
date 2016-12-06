@@ -78,23 +78,22 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                         block = self.buffer.get(curr_flow, '') + delimiter
                         if num_delimiters == 1:
                             # first and last delimiter -> keep truth of fin packet
-                            self.send_packet(block, packet.src, packet.dest, True, packet.is_fin, self.address_to_port[packet.dest])
+                            self.send_packet(block, packet.src, packet.dest, True, packet.is_fin, self.address_to_port[packet.dest], client=True)
                         else:
                             # first delimiter with more to come -> not the last packet
-                            self.send_packet(block, packet.src, packet.dest, True, False, self.address_to_port[packet.dest])
+                            self.send_packet(block, packet.src, packet.dest, True, False, self.address_to_port[packet.dest], client=True)
                         self.buffer[curr_flow] = ''
                     elif i < len(delimited_chunks) - 1:
                         # all the in-between chunks
-                        self.send_packet(delimiter, packet.src, packet.dest, True, False, self.wan_port)
+                        self.send_packet(delimiter, packet.src, packet.dest, True, False, self.address_to_port[packet.dest], client=True)
                     else:
                         # last chunk in array.
                         if num_delimiters == i+1 or packet.is_fin:
                             # ends in a delimiter or is the last part of a fin packet -> send the block
-                            self.send_packet(delimiter, packet.src, packet.dest, True, packet.is_fin, self.wan_port)
+                            self.send_packet(delimiter, packet.src, packet.dest, True, packet.is_fin, self.address_to_port[packet.dest], client=True)
                         else:
                             # doesnt end in delimiter and isnt a fin packet -> buffer the data
                             self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + delimiter
-            #self.send(packet, self.address_to_port[packet.dest])
         else:
             LOG.debug('GOT A HASH WE HAVE NEVER SEEN!')
 
