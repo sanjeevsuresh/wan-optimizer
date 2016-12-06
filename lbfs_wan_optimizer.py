@@ -172,7 +172,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             if low13 == self.GLOBAL_MATCH_BITSTRING:
                 # This is where data should be broken up
                 chunk = data[chunk_start : offset + self.window_size]
-                chunk_list.append(h_chunk)
+                chunk_list.append(chunk)
                 chunk_start = offset + self.window_size
                 offset = chunk_start
                 continue
