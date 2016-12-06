@@ -6,7 +6,7 @@ import logging
 
 logging.basicConfig()
 LOG = logging.getLogger(name='lbfs_wan_optimizer')
-LOG.setLevel(logging.DEBUG)
+LOG.setLevel(logging.INFO)
 
 class WanOptimizer(wan_optimizer.BaseWanOptimizer):
     """ WAN Optimizer that divides data into variable-sized
