@@ -156,6 +156,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
 def send_packet(self, data, src, dest, is_raw_data, is_fin, port, client=False):
     """
+    Take in the exact block of data that it's supposed to send!
+    (i.e. the end is a delimiter)
 
     Args:
         self: wan_optimizer
@@ -188,7 +190,7 @@ def send_packet(self, data, src, dest, is_raw_data, is_fin, port, client=False):
                 wan_packet = Packet(src, dest, is_raw_data, False, block)
                 self.send(wan_packet, port)
             if rest:
-                last_packet = Packet(src, dest, is_raw_data, is_fin, block_of_data[-rest:])
+                last_packet = Packet(src, dest, is_raw_data, is_fin, data[-rest:])
                 self.send(last_packet, port)
             else:
                 last_packet = Packet(src, dest, is_raw_data, is_fin, '')
