@@ -6,7 +6,7 @@ import logging
 
 logging.basicConfig()
 LOG = logging.getLogger(name='lbfs_wan_optimizer')
-LOG.setLevel(logging.INFO)
+LOG.setLevel(logging.DEBUG)
 
 class WanOptimizer(wan_optimizer.BaseWanOptimizer):
     """ WAN Optimizer that divides data into variable-sized
@@ -146,10 +146,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                  # The second packet is perfectly delimited (i.e) the delimiter is
                  # at the end of the packet.
                  last_bits = utils.get_last_n_bits(utils.get_hash(self.buffer[curr_flow]), 13)
-                 LOG.debug('last_bits == GLOBAL_MATCH_STRING == {}'.format(last_bits == self.GLOBAL_MATCH_BITSTRING))
-                 LOG.debug('Last bits {}'.format(last_bits))
-                 LOG.debug('GLOB bits {}'.format(self.GLOBAL_MATCH_BITSTRING))
-                 LOG.debug('Never hitting this case')
+                 #assert last_bits == self.GLOBAL_MATCH_BITSTRING, "{} != {}".format(last_bits, self.GLOBAL_MATCH_BITSTRING)
                  self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
                                   packet.is_raw_data, packet.is_fin, port, client=client)
                  self.buffer[curr_flow] = ''
