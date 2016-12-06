@@ -1,5 +1,6 @@
 import wan_optimizer
 from utils import get_hash, get_last_n_bits, MAX_PACKET_SIZE
+import utils
 from tcp_packet import Packet
 import logging
 
