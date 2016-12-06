@@ -6,7 +6,7 @@ import logging
 
 logging.basicConfig()
 LOG = logging.getLogger(name='lbfs_wan_optimizer')
-LOG.setLevel(logging.INFO)
+LOG.setLevel(logging.DEBUG)
 
 class WanOptimizer(wan_optimizer.BaseWanOptimizer):
     """ WAN Optimizer that divides data into variable-sized
@@ -102,10 +102,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         if delimited_chunks:
             first, rest = delimited_chunks[0], delimited_chunks[1:]
             self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + first
-            self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
-                             packet.is_raw_data, False, port, client=client)
-            self.buffer[curr_flow] = ''
             if rest:
+                LOG.debug('Sending a block')
                 self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
                                  packet.is_raw_data, False, port, client=client)
                 self.buffer[curr_flow] = ''
@@ -129,6 +127,11 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         else:
             # No Delimiter, add the rest to buffer
             self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + data
+            if packet.is_fin:
+                self.send_packet(self.buffer[curr_flow], packet.src, packet.dest,
+                                  packet.is_raw_data, packet.is_fin, port, client=client)
+
+
 
 
 
