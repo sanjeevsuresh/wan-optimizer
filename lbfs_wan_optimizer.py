@@ -86,11 +86,11 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             chunked = self.chunk_data("".join(self.buffer[curr_flow]))
             packets = list()
             for chunk in chunked:
-                send_packet = Packet(packet.src, packet.dest, chunk in self.seen.keys, False, chunk)
+                send_packet = Packet(packet.src, packet.dest, chunk in self.seen.keys(), False, chunk)
                 packets.append(send_packet)
             packets[-1].is_fin = True
             for send_packet in packets:
-                self.send(send_packet, self.wan_port)
+                self.send_packet(send_packet, self.wan_port)
             self.buffer[curr_flow] = list()
 
     def chunk_data(self, data):
@@ -144,4 +144,31 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
             offset += 1
 
+        if len(chunk_list) == 0:
+            chunk = data[chunk_start:]
+            h_chunk = utils.get_hash(chunk)
+            if not h_chunk in self.seen:
+                self.seen[h_chunk] = chunk
+                chunk_list.append(chunk)
+            else:
+                chunk_list.append(h_chunk)
         return chunk_list
+
+def send_packet(self, data, src, dest, is_raw_data, is_fin):
+    if len(data) > MAX_PACKET_SIZE:
+        num_blocks = len(data) // MAX_PACKET_SIZE
+        rest = len(data) % MAX_PACKET_SIZE
+        blocks = [data[k * MAX_PACKET_SIZE : (k + 1) * MAX_PACKET_SIZE] for k in range(num_blocks)]
+        send = []
+        for block in blocks:
+            wan_packet = Packet(src, dest, is_raw_data, False, block)
+            self.send(wan_packet, self.wan_port)
+        if rest:
+            last_packet = Packet(src, dest, is_raw_data, is_fin, block_of_data[-rest:])
+            self.send(last_packet, self.wan_port)
+        else:
+            last_packet = Packet(src, dest, is_raw_data, is_fin, '')
+            self.send(last_packet, self.wan_port)
+    else:
+        wan_packet = Packet(src, dest, is_raw_data, is_fin, data)
+        self.send(wan_packet, self.wan_port)
