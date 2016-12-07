@@ -91,6 +91,10 @@ def main():
         "--verify-middlebox-handles-interleaved-data",
         dest="verify_middlebox_handles_interleaved_data",
         action="store_true")
+    parser.add_argument(
+        "--fuck-kyle",
+        dest="fuck_kyle",
+        action="store_true")
 
     args = parser.parse_args()
     if args.middlebox_name.endswith(".py"):
@@ -195,7 +199,7 @@ def main():
             middlebox_module,
             testing_part_1)
         total_tests += 1
-    if args.run_all:
+    if args.fuck_kyle or args.run_all:
         test_module = diamond_top_2_electric_boogaloo
         passed_tests += run_test(
             test_module.data_reduction_with_jumbled_files,
