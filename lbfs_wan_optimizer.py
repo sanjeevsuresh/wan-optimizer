@@ -73,12 +73,15 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
         elif packet.is_raw_data:
             left_to_process = self.buffer.get(curr_flow, '') + packet.payload
+            offset = max(len(self.buffer.get(curr_flow, '')) - 48, 0)
             self.buffer[curr_flow] = ''
 
             while left_to_process != '':
-                if self.contains_delimiter (left_to_process):
+                delimiter_res = self.contains_delimiter (left_to_process, offset=offset)
+                offset = 0
+                if delimiter_res:
                     # Get the first delimited chunk
-                    delimited, left_to_process = self.break_on_delimiter(left_to_process)
+                    delimited, left_to_process = self.break_on_delimiter(left_to_process, offset=delimiter_res)
                     # Join with anything in the buffer
                     block = self.buffer.get(curr_flow, '') + delimited
                     # Clear buffer
@@ -100,23 +103,22 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         else:
             LOG.error("Got a piece of data that has not been seen and is not raw data. Source: {}".format(packet.src))
 
-    def contains_delimiter(self, data):
+    def contains_delimiter(self, data, offset=0):
         """ Returns true if the chunk of data has a delimiter in it
         """
         num_windows = len(data) - self.window_size
-        offset = 0
 
         while offset+self.window_size <= len(data):
             window = data[offset : offset + self.window_size]
             hashed = utils.get_hash(window)
             low13 = utils.get_last_n_bits(hashed, 13)
             if low13 == self.GLOBAL_MATCH_BITSTRING and len(window) == self.window_size:
-                return True
+                return offset
             else:
                 offset += 1
         return False
 
-    def break_on_delimiter(self, data):
+    def break_on_delimiter(self, data, offset=0):
         """ Breaks up data based on LBFS method.
 
         This function will implement the breaking of the data in the fashion described in the LBFS
@@ -129,22 +131,9 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             ordered list of data that should be sent packet by packet. This is a mix of hashed and
             un-hashed data. Data that has been sent or seen before is hashed, other data is sent raw
         """
-        assert self.contains_delimiter(data), "Data does not have delimiter."
-        num_windows = len(data) - self.window_size
-        chunk_start = 0
-        offset = 0
-
-        while offset+self.window_size <= len(data):
-            window = data[offset : offset + self.window_size]
-            hashed = utils.get_hash(window)
-            low13 = utils.get_last_n_bits(hashed, 13)
-            if low13 == self.GLOBAL_MATCH_BITSTRING and len(window) == self.window_size:
-                # This is where data should be broken up
-                chunk = data[: offset + self.window_size]
-                left = data[offset + self.window_size:]
-                return chunk, left
-            else:
-                offset += 1
+        chunk = data[: offset + self.window_size]
+        left = data[offset + self.window_size:]
+        return chunk, left
 
     def send_packet(self, block_of_data, src, dest, is_raw_data, is_fin, port, client=False):
         """
