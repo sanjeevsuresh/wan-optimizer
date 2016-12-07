@@ -6,7 +6,7 @@ import logging
 
 logging.basicConfig()
 LOG = logging.getLogger(name='lbfs_wan_optimizer')
-LOG.setLevel(logging.DEBUG)
+LOG.setLevel(logging.INFO)
 
 class WanOptimizer(wan_optimizer.BaseWanOptimizer):
     """ WAN Optimizer that divides data into variable-sized
@@ -63,15 +63,17 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
         curr_flow = (packet.src, packet.dest)
 
-        if packet.payload in self.seen:
+        if packet.payload in self.seen and not packet.is_raw_data:
             data = self.seen[packet.payload]
             self.send_packet(data, packet.src, packet.dest, True, packet.is_fin, port, client=client)
 
         elif packet.payload == '' and packet.is_fin:
             self.send_packet(self.buffer[curr_flow], packet.src, packet.dest, True, True, port, client=client)
+            self.buffer[curr_flow] = ''
 
         elif packet.is_raw_data:
-            left_to_process = packet.payload
+            left_to_process = self.buffer.get(curr_flow, '') + packet.payload
+            self.buffer[curr_flow] = ''
 
             while left_to_process != '':
                 if self.contains_delimiter (left_to_process):
@@ -96,7 +98,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                     self.buffer[curr_flow] = self.buffer.get(curr_flow, '') + left_to_process
                     break
         else:
-            LOG.error("Got a piece of data that has not been seen and is not raw data.")
+            LOG.error("Got a piece of data that has not been seen and is not raw data. Source: {}".format(packet.src))
 
     def contains_delimiter(self, data):
         """ Returns true if the chunk of data has a delimiter in it
@@ -143,7 +145,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 return chunk, left
             else:
                 offset += 1
-        return [], []
 
     def send_packet(self, block_of_data, src, dest, is_raw_data, is_fin, port, client=False):
         """
@@ -166,11 +167,17 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
         hashed_block = utils.get_hash(block_of_data)
 
-        LOG.debug("Block size: {}, Heading to client: {}".format(len(block_of_data), client))
+        LOG.debug("Block size: {}, Heading to client: {}, Packet destination: {}".format(len(block_of_data), client, dest))
+
+        if len(block_of_data) == 40908:
+            contains_delim = self.contains_delimiter(block_of_data)
+            stuff = self.break_on_delimiter(block_of_data)
+            LOG.debug("BLOCK OF TROUBLE: contains_delimiter {}, length of first break {}".format(contains_delim, len(stuff[0])))
 
         # Copy src, dest
         if hashed_block in self.seen and not client:
             is_raw_data = False
+            LOG.debug("\tSending as hash.")
             assert len(hashed_block) <= MAX_PACKET_SIZE, "Hash is not less than block_size"
             if is_fin:
                 LOG.debug('Sending hashed fin packet with data ({})'.format(

@@ -30,7 +30,9 @@ def send_multiple_files(middlebox_module, testing_part_1):
 
     # Send the sample file from client 1 to both clients 3 and 4.
     client1.send_file(filename, client3_address)
+    print "client 1 sent a file to client 3"
     client1.send_file(filename, client4_address)
+    print "client 1 sent a file to client 4"
 
     # Make sure that the files have the same contents.
     for receiver in ["client3", "client4"]:
@@ -45,7 +47,9 @@ def send_multiple_files(middlebox_module, testing_part_1):
 
     # Send a file from client 2 to clients 3 and 4.
     client2.send_file(filename, client3_address)
+    print "client 2 sent a file to client 3"
     client2.send_file(filename, client4_address)
+    print "client 2 sent a file to client 4"
 
     # Make sure that the files have the same contents.
     for receiver in ["client3", "client4"]:
