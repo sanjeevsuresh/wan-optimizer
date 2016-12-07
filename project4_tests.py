@@ -4,7 +4,7 @@ import sys
 import traceback
 
 from tests import *
-
+from tests import diamond_top_2_electric_boogaloo
 import client
 import wan
 
@@ -195,6 +195,18 @@ def main():
             middlebox_module,
             testing_part_1)
         total_tests += 1
+    if args.run_all:
+        test_module = diamond_top_2_electric_boogaloo
+        passed_tests += run_test(
+            test_module.data_reduction_with_jumbled_files,
+            middlebox_module,
+            testing_part_1)
+        passed_tests += run_test(
+            test_module.cross_sending,
+            middlebox_module,
+            testing_part_1)
+        total_tests += 2
+
 
     if passed_tests == total_tests:
         print "{}Success! Passed {}/{} tests{}".format(GREEN, passed_tests, total_tests, CLEAR)
