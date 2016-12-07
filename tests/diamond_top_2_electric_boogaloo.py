@@ -69,7 +69,7 @@ def data_reduction_with_jumbled_files(middlebox_module, testing_part_1):
         os.remove(output_file_name)
         past = bytes_in_sent_files
         bytes_in_sent_files += len(data) + len(filename) + len(client.FILENAME_DELIMITER)
-
+        print(bytes_in_sent_files - past)
     bytes_sent = wide_area_network.get_total_bytes_sent()
 
     reduction = (float(bytes_in_sent_files - bytes_sent)
@@ -140,8 +140,11 @@ def cross_sending(middlebox_module, testing_part_1):
         f.close()
 
         past2 = wide_area_network.get_total_bytes_sent()
+        print('client1 sending to 4')
         client1.send_file(filename, client4_address)
+        print('client5 sending to 2')
         client5.send_file(filename, client2_address)
+        print('client3 sending to 6')
         client3.send_file(filename, client6_address)
         output_file_name = "{}-{}".format("client2", filename)
         # Removing the output file just created

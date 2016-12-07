@@ -155,26 +155,20 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         """
 
         hashed_block = utils.get_hash(block_of_data)
-
         LOG.debug("Block size: {}, Heading to client: {}, Packet destination: {}".format(len(block_of_data), client, dest))
-
-        if len(block_of_data) == 40908:
-            contains_delim = self.contains_delimiter(block_of_data)
-            stuff = self.break_on_delimiter(block_of_data)
-            LOG.debug("BLOCK OF TROUBLE: contains_delimiter {}, length of first break {}".format(contains_delim, len(stuff[0])))
-
         # Copy src, dest
         if hashed_block in self.seen and not client:
             is_raw_data = False
             LOG.debug("\tSending as hash.")
             assert len(hashed_block) <= MAX_PACKET_SIZE, "Hash is not less than block_size"
             if is_fin:
-                LOG.debug('Sending hashed fin packet with data ({})'.format(
+                LOG.debug('\tSending hashed fin packet with data ({})'.format(
                     'handle_incoming' if client else 'handle_outgoing'))
             wan_packet = Packet(src, dest, is_raw_data, is_fin, hashed_block)
             self.send(wan_packet, self.wan_port)
 
         else:
+            #LOG.debug("\tSTORED:Block size: {}, Heading to client: {}, Packet destination: {}".format(len(block_of_data),client, dest))
             self.seen[hashed_block] = block_of_data
             if len(block_of_data) > MAX_PACKET_SIZE:
                 num_blocks = len(block_of_data) // MAX_PACKET_SIZE
@@ -188,15 +182,16 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 if rest:
                     # Sending fin packet ...
                     if is_fin:
-                        LOG.debug('Sending fin packet with data ({})'.format(
+                        LOG.debug('\tSending fin packet with data ({})'.format(
                             'handle_incoming' if client else 'handle_outgoing'))
                     last_packet = Packet(src, dest, is_raw_data, is_fin, block_of_data[-rest:])
                     self.send(last_packet, port)
                 else:
                     # Sending fin packet ...
                     if is_fin:
-                        LOG.debug('Sending fin packet with data ({})'.format(
+                        LOG.debug('\tSending fin packet without data ({})'.format(
                             'handle_incoming' if client else 'handle_outgoing'))
+
                     last_packet = Packet(src, dest, is_raw_data, is_fin, '')
                     self.send(last_packet, port)
             else:
